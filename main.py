@@ -74,6 +74,9 @@ class UrbanRoutesPage:
     def get_to(self):
         return self.driver.find_element(*self.to_field).get_property('value')
 
+    def get_comment(self):
+        return self.driver.find_element(*self.comments_order).get_property('value')
+
     def set_route(self, from_address, to_address):
         self.set_from(from_address)
         self.set_to(to_address)
@@ -219,6 +222,21 @@ class TestUrbanRoutes:
         routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[2]'))
         routes_page.add_credit_card(data.card_number, data.card_code)
 
+    def test_add_comment(self):
+        self.driver.get(data.urban_routes_url)
+        routes_page = UrbanRoutesPage(self.driver)
+        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        address_from = data.address_from
+        address_to = data.address_to
+        routes_page.set_route(address_from, address_to)
+        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.taxi_click()
+        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.tariff_click()
+        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[3]/div'))
+        routes_page.add_comment(data.message_for_driver)
+        assert routes_page.get_comment() == data.message_for_driver
+
     def test_taxi_service(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
@@ -237,7 +255,7 @@ class TestUrbanRoutes:
         routes_page.scroll_page((By.XPATH, '/html/body/div/div/div[3]/div[3]/div[2]/div[2]/div[2]'))
         routes_page.add_credit_card(data.card_number, data.card_code)
         routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[3]/div'))
-        routes_page.add_comment('Hola, guapo')
+        routes_page.add_comment(data.message_for_driver)
         routes_page.scroll_page((By.XPATH, '/html/body/div/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[1]/div/div[2]/div/span'))
         routes_page.checkbox_deliver_click()
         routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[3]/div/div[2]/div[1]'))
