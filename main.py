@@ -7,36 +7,11 @@ from selenium.webdriver import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
-
-# no modificar
-def retrieve_phone_code(driver) -> str:
-    """Este código devuelve un número de confirmación de teléfono y lo devuelve como un string.
-    Utilízalo cuando la aplicación espere el código de confirmación para pasarlo a tus pruebas.
-    El código de confirmación del teléfono solo se puede obtener después de haberlo solicitado en la aplicación."""
-
-    import json
-    import time
-    from selenium.common import WebDriverException
-    code = None
-    for i in range(10):
-        try:
-            logs = [log["message"] for log in driver.get_log('performance') if log.get("message")
-                    and 'api/v1/number?number' in log.get("message")]
-            for log in reversed(logs):
-                message_data = json.loads(log)["message"]
-                body = driver.execute_cdp_cmd('Network.getResponseBody',
-                                              {'requestId': message_data["params"]["requestId"]})
-                code = ''.join([x for x in body['body'] if x.isdigit()])
-        except WebDriverException:
-            time.sleep(1)
-            continue
-        if not code:
-            raise Exception("No se encontró el código de confirmación del teléfono.\n"
-                            "Utiliza 'retrieve_phone_code' solo después de haber solicitado el código en tu aplicación.")
-        return code
+import helpers
 
 
 class UrbanRoutesPage:
+    logo_icon = (By.XPATH, '//div[@class="logo"]')
     from_field = (By.ID, 'from')
     to_field = (By.ID, 'to')
     ask_for_taxi_button = (By.XPATH, '//div[@class="results-text"]//button[@class="button round"]')
@@ -52,12 +27,16 @@ class UrbanRoutesPage:
     card_code = (By.XPATH, '/html/body/div/div/div[2]/div[2]/div[2]/form/div[1]/div[2]/div[2]/div[2]/input')
     card_button_submit = (By.XPATH, '/html/body/div/div/div[2]/div[2]/div[2]/form/div[3]/button[1]')
     credit_card_close = (By.XPATH, '//*[@id="root"]/div/div[2]/div[2]/div[1]/button')
+    credit_card_text = (By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[2]/div[2]/div[1]')
     comments_order = (By.XPATH, '//*[@id="comment"]')
     checkbox_deliver = (By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[1]/div/div[2]/div')
+    checkbox_selected = (By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[1]/div/div[2]/div/input')
     ice_cream_counter = (By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[3]/div/div[2]/div[1]/div/div[2]/div/div[3]')
+    counter_value = (By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[3]/div/div[2]/div[1]/div/div[2]/div/div[2]')
     ask_taxi_service = (By.CLASS_NAME, 'smart-button')
     order_time = (By.CLASS_NAME, 'order-header-time')
     order_time_left = (By.XPATH, '//*[@id="root"]/div/div[5]/div[2]/div[1]/div/div[1]')
+    img_driver = (By.XPATH, '//*[@id="root"]/div/div[5]/div[2]/div[2]/div[1]/div[1]/div[1]/img')
 
     def __init__(self, driver):
         self.driver = driver
@@ -90,6 +69,9 @@ class UrbanRoutesPage:
     def tariff_click(self):
         self.driver.find_element(*self.comfort_tariff).click()
 
+    def get_tariff_element(self):
+        return self.driver.find_element(*self.comfort_tariff)
+
     def phone_click(self):
         self.driver.find_element(*self.phone_button).click()
 
@@ -107,6 +89,9 @@ class UrbanRoutesPage:
         self.phone_click()
         self.fill_phone_number(number)
         self.get_phone_code()
+
+    def get_phone_value(self):
+        return self.driver.find_element(*self.phone_button).text
 
     def payment_method_click(self):
         self.driver.find_element(*self.payment_method_button).click()
@@ -134,15 +119,28 @@ class UrbanRoutesPage:
         self.card_data_submit()
         self.close_credit_card()
 
+    def get_credit_card_data(self):
+        return self.driver.find_element(*self.credit_card_text).text
+
     def add_comment(self, comment):
         self.driver.find_element(*self.comments_order).send_keys(comment)
 
-    def checkbox_deliver_click(self):
-        self.driver.find_element(*self.checkbox_deliver).click()
+    def checkbox_deliver_click(self, counter):
+        checkbox_button = self.driver.find_element(*self.checkbox_deliver)
+        for i in range(counter):
+            checkbox_button.click()
+
+    def get_checkbox_selection(self):
+        return self.driver.find_element(*self.checkbox_selected).is_selected()
 
     def ice_cream_counter_click(self, counter):
+        icecream_button = self.driver.find_element(*self.ice_cream_counter)
         for i in range(counter):
-            self.driver.find_element(*self.ice_cream_counter).click()
+            icecream_button.click()
+
+    def get_counter_value(self):
+        counter_element = self.driver.find_element(*self.counter_value).text
+        return int(counter_element)
 
     def ask_taxi_click(self):
         self.driver.find_element(*self.ask_taxi_service).click()
@@ -152,10 +150,11 @@ class UrbanRoutesPage:
         self.driver.execute_script("arguments[0].scrollIntoView();", element)
 
     def wait_driver(self):
-        WebDriverWait(self.driver, 30).until(expected_conditions.presence_of_element_located((By.XPATH,'//*[@id="root"]/div/div[5]/div[2]/div[2]/div[1]/div[1]/div[1]/img')))
+        WebDriverWait(self.driver, 30).until(expected_conditions.presence_of_element_located(self.img_driver))
 
     def get_order_time_left(self):
         return self.driver.find_element(*self.order_time_left).text
+
 
 class TestUrbanRoutes:
 
@@ -163,17 +162,16 @@ class TestUrbanRoutes:
 
     @classmethod
     def setup_class(cls):
-        # no lo modifiques, ya que necesitamos un registro adicional habilitado para recuperar el código de confirmación del teléfono
         from selenium.webdriver.chrome.options import Options
         options = Options()
         options.set_capability("goog:loggingPrefs", {'performance': 'ALL'})
-        options.add_argument('--headless')
+        #options.add_argument("--headless")
         cls.driver = webdriver.Chrome(options=options)
 
     def test_set_route(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
@@ -183,83 +181,122 @@ class TestUrbanRoutes:
     def test_select_tariff(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
-        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
         routes_page.taxi_click()
-        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.wait_load(routes_page.comfort_tariff)
         routes_page.tariff_click()
+        assert "active" in routes_page.get_tariff_element().get_attribute("class")
 
     def test_fill_phone_number(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
-        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
         routes_page.taxi_click()
-        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.wait_load(routes_page.comfort_tariff)
         routes_page.tariff_click()
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[1]/div'))
+        routes_page.scroll_page(routes_page.phone_button)
         routes_page.set_phone_number(data.phone_number)
-        phone_code = retrieve_phone_code(self.driver)
+        phone_code = helpers.retrieve_phone_code(self.driver)
         routes_page.fill_code(phone_code)
+        assert routes_page.get_phone_value() == data.phone_number
 
     def test_card_number(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
-        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
         routes_page.taxi_click()
-        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.wait_load(routes_page.comfort_tariff)
         routes_page.tariff_click()
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[2]'))
+        routes_page.scroll_page(routes_page.payment_method_button)
         routes_page.add_credit_card(data.card_number, data.card_code)
+        assert routes_page.get_credit_card_data() == "Tarjeta"
 
     def test_add_comment(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
-        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
         routes_page.taxi_click()
-        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.wait_load(routes_page.comfort_tariff)
         routes_page.tariff_click()
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[3]/div'))
+        routes_page.scroll_page(routes_page.comments_order)
         routes_page.add_comment(data.message_for_driver)
         assert routes_page.get_comment() == data.message_for_driver
+
+    def test_checkbox_deliver(self):
+        self.driver.get(data.urban_routes_url)
+        routes_page = UrbanRoutesPage(self.driver)
+        routes_page.wait_load(routes_page.logo_icon)
+        address_from = data.address_from
+        address_to = data.address_to
+        routes_page.set_route(address_from, address_to)
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
+        routes_page.taxi_click()
+        routes_page.wait_load(routes_page.comfort_tariff)
+        routes_page.tariff_click()
+        routes_page.scroll_page(routes_page.checkbox_deliver)
+        routes_page.checkbox_deliver_click(1)
+        assert routes_page.get_checkbox_selection() == True
+
+    def test_icecream_deliver(self):
+        self.driver.get(data.urban_routes_url)
+        routes_page = UrbanRoutesPage(self.driver)
+        routes_page.wait_load(routes_page.logo_icon)
+        address_from = data.address_from
+        address_to = data.address_to
+        routes_page.set_route(address_from, address_to)
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
+        routes_page.taxi_click()
+        routes_page.wait_load(routes_page.comfort_tariff)
+        routes_page.tariff_click()
+        routes_page.scroll_page(routes_page.ice_cream_counter)
+        routes_page.ice_cream_counter_click(2)
+        assert routes_page.get_counter_value() == 2
 
     def test_taxi_service(self):
         self.driver.get(data.urban_routes_url)
         routes_page = UrbanRoutesPage(self.driver)
-        routes_page.wait_load((By.XPATH, '//div[@class="logo"]'))
+        routes_page.wait_load(routes_page.logo_icon)
         address_from = data.address_from
         address_to = data.address_to
         routes_page.set_route(address_from, address_to)
-        routes_page.wait_load((By.XPATH, '//div[@class="results-text"]//button[@class="button round"]'))
+        routes_page.wait_load(routes_page.ask_for_taxi_button)
         routes_page.taxi_click()
-        routes_page.wait_load((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[1]/div[5]'))
+        routes_page.wait_load(routes_page.comfort_tariff)
         routes_page.tariff_click()
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[1]/div'))
+        assert "active" in routes_page.get_tariff_element().get_attribute("class")
+        routes_page.scroll_page(routes_page.phone_button)
         routes_page.set_phone_number(data.phone_number)
-        phone_code = retrieve_phone_code(self.driver)
+        phone_code = helpers.retrieve_phone_code(self.driver)
         routes_page.fill_code(phone_code)
-        routes_page.scroll_page((By.XPATH, '/html/body/div/div/div[3]/div[3]/div[2]/div[2]/div[2]'))
+        assert routes_page.get_phone_value() == data.phone_number
+        routes_page.scroll_page(routes_page.payment_method_button)
         routes_page.add_credit_card(data.card_number, data.card_code)
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[3]/div'))
+        assert routes_page.get_credit_card_data() == "Tarjeta"
+        routes_page.scroll_page(routes_page.comments_order)
         routes_page.add_comment(data.message_for_driver)
-        routes_page.scroll_page((By.XPATH, '/html/body/div/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[1]/div/div[2]/div/span'))
-        routes_page.checkbox_deliver_click()
-        routes_page.scroll_page((By.XPATH, '//*[@id="root"]/div/div[3]/div[3]/div[2]/div[2]/div[4]/div[2]/div[3]/div/div[2]/div[1]'))
+        assert routes_page.get_comment() == data.message_for_driver
+        routes_page.scroll_page(routes_page.checkbox_deliver)
+        routes_page.checkbox_deliver_click(2)
+        assert routes_page.get_checkbox_selection() == True
+        routes_page.scroll_page(routes_page.ice_cream_counter)
         routes_page.ice_cream_counter_click(2)
+        assert routes_page.get_counter_value() == 2
         routes_page.ask_taxi_click()
         routes_page.wait_driver()
         assert "El conductor llegará en" in routes_page.get_order_time_left()
